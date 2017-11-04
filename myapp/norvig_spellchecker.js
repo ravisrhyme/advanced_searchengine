@@ -1,131 +1,107 @@
-/**
-Copyright (c) 2012 Shine Xavier
+/* -*- mode: JavaScript; c-basic-offset: 4; tab-width: 4; indent-tabs-mode: nil -*- */
+/* ex: set tabstop=4 expandtab: */
+/*
+ * Copyright (c) 2009 Panagiotis Astithas
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+/*
+ * A spell-checker based on the statistical algorithm described by Peter Norvig
+ * in http://norvig.com/spell-correct.html
+ *
+ * Usage requires a two-step process:
+ * 1) call speller.train() one or more times with a large text to train the language model
+ * 2) call speller.correct(word) to retrieve the correction for the specified word
+ */
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+var speller = {};
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
+// Dummy initializer for non-ServerJS environments.
+var exports;
+if (!exports) exports = {};
 
-module.exports = {
-var NorvigSpellChecker = function () {
-	var that = {},
-		filter = /([a-z]+)/g,
-		alphabets = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'],
-		NWORDS = {};//Training Model
-	
-	var train = function(trainingText) {
-		var features = trainingText.match(filter);
-		for(var f in features) {
-			var feature = features[f];
-			if (NWORDS.hasOwnProperty(feature)) {
-				NWORDS[feature] += 1;
-			}
-			else {
-				NWORDS[feature] = 1;
-			}
-		}
-	};
-	
-	var edits1 = function (words) {
-		var edits1Set = [];
-		for(var w = 0; w < words.length; w++) {
-			var word = words[w];
-			for (var i = 0; i <= word.length; i++) {
-				//splits (a & b)
-				var a = word.slice(0,i),
-					b = word.slice(i),
-					c = b.slice(1),
-					d = b.slice(2);
-				if (b != '') {
-					//deletes
-					edits1Set.push(a + c);
-					//transposes
-					if (b.length > 1) {
-						edits1Set.push(a + b.charAt(1) + b.charAt(0) + d);
-					}
-					//replaces & inserts
-					for (var j = 0; j < alphabets.length; j++) {
-						edits1Set.push(a + alphabets[j] + c);//replaces
-						edits1Set.push(a + alphabets[j] + b);//inserts
-					}
-				}
-				else {
-					//inserts (remaining set for b == '')
-					for (var j = 0; j < alphabets.length; j++) {
-						edits1Set.push(a + alphabets[j] + b);
-					}
-				}
-			}
-		}
-		return edits1Set;
-	};
-	
-	var edits2 = function (words) {
-		return edits1(edits1(words));
-	};
-
-	Object.prototype.isEmpty = function () {
-		var that = this;
-		for(var prop in that) {
-			if(that.hasOwnProperty(prop))
-				return false;
-		}
-		return true;
-	};
-
-	Function.prototype.curry = function () {
-		var slice = Array.prototype.slice,
-			args = slice.apply(arguments),
-			that = this;
-		return function () {
-			return that.apply(null, args.concat(slice.apply(arguments)));
-		};
-	};
-	
-	var known = function () {
-		var knownSet = {};
-		for (var i = 0; knownSet.isEmpty() && i < arguments.length; i++) {
-			var words = arguments[i];
-			for (var j = 0; j < words.length; j++) {
-				var word = words[j];
-				if (!knownSet.hasOwnProperty(word) && NWORDS.hasOwnProperty(word)) {
-					knownSet[word] = NWORDS[word];
-				}
-			}
-		}
-		return knownSet;
-	};
-	
-	var max = function(candidates) {
-		var maxCandidateKey = null,
-			maxCandidateVal = 0,
-			currentCandidateVal;
-		for (var candidate in candidates) {
-			currentCandidateVal = candidates[candidate];
-			if (candidates.hasOwnProperty(candidate) && currentCandidateVal > maxCandidateVal) {
-				maxCandidateKey = candidate;
-				maxCandidateVal = currentCandidateVal;
-			}
-		}
-		return maxCandidateKey;
-	};
-
-	var correct = function () {
-		var corrections = {};
-		for (var i = 0; i < arguments.length; i++) {
-			var word = arguments[i];
-			var candidates = known.curry()([word],edits1([word]),edits2([word]));
-			corrections[word] = candidates.isEmpty() ? word : max(candidates);
-		}
-		return corrections;
-	};
-	
-	that.train = train;
-	that.correct = correct.curry();
-	
-	return that;
+// A function that trains the language model with the words in the supplied text.
+// Multiple invocation of this function can extend the training of the model.
+exports.train = speller.train = function (text) {
+	var word, m, r = /[a-z]+/g;
+	text = text.toLowerCase();
+	while ((m = r.exec(text))) {
+		word = m[0];
+		speller.nWords[word] = speller.nWords.hasOwnProperty(word) ? speller.nWords[word] + 1 : 1;
+	}
 };
 
-} // End of module.export
+// A function that returns the correction for the specified word.
+exports.correct = speller.correct = function (word) {
+	if (speller.nWords.hasOwnProperty(word)) return word;
+	var candidates = {}, list = speller.edits(word);
+	list.forEach(function (edit) {
+		if (speller.nWords.hasOwnProperty(edit)) candidates[speller.nWords[edit]] = edit;
+	});
+	if (speller.countKeys(candidates) > 0) return candidates[speller.max(candidates)];
+	list.forEach(function (edit) {
+		speller.edits(edit).forEach(function (w) {
+			if (speller.nWords.hasOwnProperty(w)) candidates[speller.nWords[w]] = w;
+		});
+	});
+	return speller.countKeys(candidates) > 0 ? candidates[speller.max(candidates)] : word;
+};
+
+// A map of words to the number of times they were encountered during training.
+// This is exported only for the benefit of spelltest.js.
+exports.nWords = speller.nWords = {};
+
+// A helper function that counts the keys in the supplied object.
+speller.countKeys = function (object) {
+	var attr, count = 0;
+	for (attr in object)
+		if (object.hasOwnProperty(attr))
+			count++;
+	return count;	
+};
+
+// A helper function that returns the word with the most occurences in the language
+// model, among the supplied candidates.
+speller.max = function (candidates) {
+	var candidate, arr = [];
+	for (candidate in candidates)
+		if (candidates.hasOwnProperty(candidate))
+			arr.push(candidate);
+	return Math.max.apply(null, arr);
+};
+
+speller.letters = "abcdefghijklmnopqrstuvwxyz".split("");
+
+// A function that returns the set of possible corrections of the specified word.
+// The edits can be deletions, insertions, alterations or transpositions.
+speller.edits = function (word) {
+	var i, results = [];
+	// deletion
+	for (i=0; i < word.length; i++)
+	    results.push(word.slice(0, i) + word.slice(i+1));
+	// transposition
+	for (i=0; i < word.length-1; i++)
+	    results.push(word.slice(0, i) + word.slice(i+1, i+2) + word.slice(i, i+1) + word.slice(i+2));
+	// alteration
+	for (i=0; i < word.length; i++)
+	    speller.letters.forEach(function (l) {
+	        results.push(word.slice(0, i) + l + word.slice(i+1));
+		});
+	// insertion
+	for (i=0; i <= word.length; i++)
+	    speller.letters.forEach(function (l) {
+	        results.push(word.slice(0, i) + l + word.slice(i));
+		});
+	return results;
+};
